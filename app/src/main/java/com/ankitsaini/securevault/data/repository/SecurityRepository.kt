@@ -4,7 +4,6 @@ import com.ankitsaini.securevault.data.dao.*
 import com.ankitsaini.securevault.data.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -52,7 +51,7 @@ class SecurityRepository @Inject constructor(
     fun getEventsForPackage(packageName: String): Flow<List<SecurityEvent>> = 
         securityEventDao.getEventsForPackage(packageName)
     
-    suspend fun logEvent(event: SecurityEvent) = 
+    suspend fun logEvent(event: SecurityEvent): Long = 
         securityEventDao.insertEvent(event)
     
     suspend fun logFailedUnlock(packageName: String, method: String): Long {
