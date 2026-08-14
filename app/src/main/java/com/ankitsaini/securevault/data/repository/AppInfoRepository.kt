@@ -33,17 +33,18 @@ class AppInfoRepository @Inject constructor(
         
         try {
             val packages = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-            val protectedApps = securityRepository.getAllProtectedApps()
             
-            // Collect all protected app package names for quick lookup
-            val protectedPackages = mutableSetOf<String>()
-            protectedApps.collect { apps ->
-                apps.forEach { app ->
-                    if (app.isProtected) {
-                        protectedPackages.add(app.packageName)
-                    }
-                }
+            // Get protected apps list
+            val protectedAppsList = mutableListOf<ProtectedApp>()
+            securityRepository.getAllProtectedApps().collect { apps ->
+                protectedAppsList.clear()
+                protectedAppsList.addAll(apps)
             }
+            
+            val protectedPackages = protectedAppsList
+                .filter { it.isProtected }
+                .map { it.packageName }
+                .toSet()
             
             for (appInfo in packages) {
                 // Skip our own app
