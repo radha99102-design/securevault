@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
         AppSettings::class
     ],
     version = 1,
-    exportSchema = true
+    exportSchema = false // Changed to false for simplicity
 )
 @TypeConverters(
     LockTypeConverter::class,
