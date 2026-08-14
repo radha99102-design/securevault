@@ -3,13 +3,9 @@ package com.ankitsaini.securevault.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ankitsaini.securevault.data.model.LockType
-import com.ankitsaini.securevault.data.model.SecurityEvent
-import com.ankitsaini.securevault.data.model.EventType
 import com.ankitsaini.securevault.data.repository.SecurityRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -20,8 +16,11 @@ class AuthViewModel @Inject constructor(
     private val securityRepository: SecurityRepository
 ) : ViewModel() {
     
-    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Initial)
+    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+    
+    private val _authState = MutableStateFlow<AuthenticationManager.AuthState>(AuthenticationManager.AuthState.Idle)
+    val authState: StateFlow<AuthenticationManager.AuthState> = _authState.asStateFlow()
     
     private val _currentPackage = MutableStateFlow<String?>(null)
     val currentPackage: StateFlow<String?> = _currentPackage.asStateFlow()
@@ -35,30 +34,24 @@ class AuthViewModel @Inject constructor(
         val biometricAvailable: Boolean = false
     )
     
-    sealed class AuthEvents {
-        data class ShowError(val message: String) : AuthEvents()
-        data class AuthenticationSuccess(val packageName: String) : AuthEvents()
-        object AuthenticationCancelled : AuthEvents()
-        data class LockedOut(val retryAfterMs: Long) : AuthEvents()
-    }
-    
     init {
         _uiState.value = AuthUiState(
             biometricAvailable = authenticationManager.isBiometricAvailable()
         )
         
-        // Observe authentication state
         viewModelScope.launch {
             authenticationManager.authState.collect { state ->
                 when (state) {
                     is AuthenticationManager.AuthState.Success -> {
                         _uiState.value = _uiState.value.copy(isLoading = false)
+                        _authState.value = state
                     }
                     is AuthenticationManager.AuthState.Error -> {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             errorMessage = state.message
                         )
+                        _authState.value = state
                     }
                     is AuthenticationManager.AuthState.Failed -> {
                         _uiState.value = _uiState.value.copy(
@@ -66,14 +59,18 @@ class AuthViewModel @Inject constructor(
                             attemptsRemaining = state.attemptsRemaining,
                             errorMessage = "Authentication failed"
                         )
+                        _authState.value = state
                     }
                     is AuthenticationManager.AuthState.LockedOut -> {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             isLockedOut = true
                         )
+                        _authState.value = state
                     }
-                    else -> {}
+                    else -> {
+                        _authState.value = state
+                    }
                 }
             }
         }
@@ -90,44 +87,28 @@ class AuthViewModel @Inject constructor(
     
     fun authenticateWithPin(pin: String) {
         val packageName = _currentPackage.value ?: return
-        val storedHash = when {
-            packageName == "com.ankitsaini.securevault" -> 
-                sessionManager.getMasterPinHash()
-            else -> null
-        }
         
-        if (storedHash == null) {
-            viewModelScope.launch {
-                val app = securityRepository.getProtectedApp(packageName)
-                if (app?.pinHash != null) {
-                    performPinAuthentication(packageName, pin, app.pinHash)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = "No PIN set for this app"
-                    )
-                }
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            
+            val app = securityRepository.getProtectedApp(packageName)
+            val storedHash = app?.pinHash ?: sessionManager.getMasterPinHash()
+            
+            if (storedHash != null) {
+                val result = authenticationManager.verifyPin(
+                    packageName = packageName,
+                    enteredPin = pin,
+                    storedPinHash = storedHash
+                )
+                
+                handleAuthResult(result, packageName)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = "No PIN set for this app"
+                )
             }
-        } else {
-            viewModelScope.launch {
-                performPinAuthentication(packageName, pin, storedHash)
-            }
         }
-    }
-    
-    private suspend fun performPinAuthentication(
-        packageName: String,
-        pin: String,
-        storedHash: String
-    ) {
-        _uiState.value = _uiState.value.copy(isLoading = true)
-        
-        val result = authenticationManager.verifyPin(
-            packageName = packageName,
-            enteredPin = pin,
-            storedPinHash = storedHash
-        )
-        
-        handleAuthResult(result, packageName)
     }
     
     fun authenticateWithPattern(pattern: List<Int>) {
@@ -163,8 +144,8 @@ class AuthViewModel @Inject constructor(
         when (result) {
             is AuthenticationManager.AuthResult.Success -> {
                 sessionManager.unlockApp(packageName)
-                _uiState.value = _uiState.value.copy(isLoading = false)
                 sessionManager.authenticateSession()
+                _uiState.value = _uiState.value.copy(isLoading = false)
             }
             is AuthenticationManager.AuthResult.Failure -> {
                 _uiState.value = _uiState.value.copy(
