@@ -4,13 +4,12 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Matrix
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
-import com.ankitsaini.securevault.data.model.FailedAttemptRecord
+import androidx.lifecycle.LifecycleRegistry
 import com.ankitsaini.securevault.data.model.SecurityEvent
 import com.ankitsaini.securevault.data.model.EventType
 import com.ankitsaini.securevault.data.repository.SecurityRepository
@@ -41,8 +40,6 @@ class CameraManager @Inject constructor(
         private const val PHOTO_FILENAME_PREFIX = "INTRUDER"
         private const val PHOTO_FILENAME_FORMAT = "yyyyMMdd_HHmmss_SSS"
         private const val IMAGE_QUALITY = 90
-        private const val MAX_IMAGE_WIDTH = 1080
-        private const val MAX_IMAGE_HEIGHT = 1920
     }
     
     data class CameraResult(
@@ -74,31 +71,34 @@ class CameraManager @Inject constructor(
                 try {
                     cameraProvider = cameraProviderFuture.get()
                     
-                    // Configure image capture
                     imageCapture = ImageCapture.Builder()
                         .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                         .setFlashMode(ImageCapture.FLASH_MODE_AUTO)
-                        .setTargetRotation(Surface.ROTATION_0)
                         .build()
                     
-                    // Select front camera for intruder photo
                     val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-                    
-                    // Create preview (not displayed, but needed for camera to work)
                     val preview = Preview.Builder().build()
                     
-                    // Unbind any existing use cases
                     cameraProvider?.unbindAll()
                     
-                    // Bind to lifecycle
+                    val lifecycleOwner = object : LifecycleOwner {
+                        private val lifecycleRegistry = LifecycleRegistry(this)
+                        
+                        init {
+                            lifecycleRegistry.currentState = Lifecycle.State.STARTED
+                        }
+                        
+                        override val lifecycle: Lifecycle
+                            get() = lifecycleRegistry
+                    }
+                    
                     cameraProvider?.bindToLifecycle(
-                        createLifecycleOwner(),
+                        lifecycleOwner,
                         cameraSelector,
                         preview,
                         imageCapture
                     )
                     
-                    // Capture photo
                     capturePhoto(packageName, onResult)
                     
                 } catch (e: Exception) {
@@ -127,10 +127,6 @@ class CameraManager @Inject constructor(
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileOptions) {
                     CoroutineScope(Dispatchers.Main).launch {
                         try {
-                            // Compress the image
-                            compressImage(photoFile)
-                            
-                            // Log the security event
                             securityRepository.logFailedUnlock(packageName, "INTRUDER_PHOTO")
                             
                             securityRepository.logEvent(
@@ -178,50 +174,6 @@ class CameraManager @Inject constructor(
         ).format(Date())
         
         return File(photoDirectory, "${PHOTO_FILENAME_PREFIX}_$timestamp.jpg")
-    }
-    
-    private fun compressImage(photoFile: File) {
-        try {
-            val originalBitmap = BitmapFactory.decodeFile(photoFile.absolutePath)
-            
-            // Calculate scaling
-            val width = originalBitmap.width
-            val height = originalBitmap.height
-            val scaleFactor = minOf(
-                MAX_IMAGE_WIDTH.toFloat() / width,
-                MAX_IMAGE_HEIGHT.toFloat() / height,
-                1.0f
-            )
-            
-            if (scaleFactor < 1.0f) {
-                val newWidth = (width * scaleFactor).toInt()
-                val newHeight = (height * scaleFactor).toInt()
-                
-                val scaledBitmap = Bitmap.createScaledBitmap(
-                    originalBitmap,
-                    newWidth,
-                    newHeight,
-                    true
-                )
-                
-                // Save compressed image
-                FileOutputStream(photoFile).use { outputStream ->
-                    scaledBitmap.compress(
-                        Bitmap.CompressFormat.JPEG,
-                        IMAGE_QUALITY,
-                        outputStream
-                    )
-                }
-                
-                // Clean up
-                if (scaledBitmap != originalBitmap) {
-                    originalBitmap.recycle()
-                }
-                scaledBitmap.recycle()
-            }
-        } catch (e: Exception) {
-            // Compression failed, use original image
-        }
     }
     
     fun getIntruderPhotos(): List<File> {
@@ -275,19 +227,6 @@ class CameraManager @Inject constructor(
             context,
             android.Manifest.permission.CAMERA
         ) == PackageManager.PERMISSION_GRANTED
-    }
-    
-    private fun createLifecycleOwner(): LifecycleOwner {
-        return object : LifecycleOwner {
-            private val lifecycleRegistry = androidx.lifecycle.LifecycleRegistry(this)
-            
-            init {
-                lifecycleRegistry.currentState = androidx.lifecycle.Lifecycle.State.STARTED
-            }
-            
-            override val lifecycle: androidx.lifecycle.Lifecycle
-                get() = lifecycleRegistry
-        }
     }
     
     fun releaseCamera() {
