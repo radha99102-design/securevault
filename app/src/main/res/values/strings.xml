@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Secure Vault</string>
+    <string name="accessibility_service_label">Secure Vault App Protection</string>
+    <string name="accessibility_service_description">Monitors app launches and triggers security locks for protected applications. This service is required for real-time app protection.</string>
+    <string name="notification_listener_label">Secure Vault Notification Filter</string>
+    <string name="notification_listener_description">Filters and masks notifications from locked applications to protect your privacy.</string>
+</resources>
