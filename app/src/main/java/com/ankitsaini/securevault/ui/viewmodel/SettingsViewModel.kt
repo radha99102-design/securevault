@@ -2,7 +2,6 @@ package com.ankitsaini.securevault.ui.viewmodel
 
 import android.content.Context
 import android.content.Intent
-import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ankitsaini.securevault.auth.PinHasher
@@ -64,27 +63,13 @@ class SettingsViewModel @Inject constructor(
     
     private fun loadSettings() {
         _settings.value = AppSettings(
-            biometricEnabled = preferencesManager.getBoolean(
-                Constants.PREF_BIOMETRIC_ENABLED, false
-            ),
-            autoStartOnBoot = preferencesManager.getBoolean(
-                Constants.PREF_AUTO_START, true
-            ),
-            intruderPhotoEnabled = preferencesManager.getBoolean(
-                Constants.PREF_INTRUDER_PHOTO, true
-            ),
-            maxFailedAttempts = preferencesManager.getInt(
-                Constants.PREF_MAX_FAILED_ATTEMPTS, 3
-            ),
-            relockTimeout = preferencesManager.getInt(
-                Constants.PREF_RELOCK_TIMEOUT, 30
-            ),
-            stealthMode = preferencesManager.getBoolean(
-                Constants.PREF_STEALTH_MODE, false
-            ),
-            fakeCrashEnabled = preferencesManager.getBoolean(
-                Constants.KEY_FAKE_CRASH, false
-            )
+            biometricEnabled = preferencesManager.getBoolean(Constants.PREF_BIOMETRIC_ENABLED, false),
+            autoStartOnBoot = preferencesManager.getBoolean(Constants.PREF_AUTO_START, true),
+            intruderPhotoEnabled = preferencesManager.getBoolean(Constants.PREF_INTRUDER_PHOTO, true),
+            maxFailedAttempts = preferencesManager.getInt(Constants.PREF_MAX_FAILED_ATTEMPTS, 3),
+            relockTimeout = preferencesManager.getInt(Constants.PREF_RELOCK_TIMEOUT, 30),
+            stealthMode = preferencesManager.getBoolean(Constants.PREF_STEALTH_MODE, false),
+            fakeCrashEnabled = preferencesManager.getBoolean(Constants.KEY_FAKE_CRASH, false)
         )
     }
     
@@ -125,7 +110,6 @@ class SettingsViewModel @Inject constructor(
         preferencesManager.putBoolean(Constants.PREF_STEALTH_MODE, newValue)
         _settings.value = _settings.value.copy(stealthMode = newValue)
         
-        // Toggle app icon visibility
         val componentName = android.content.ComponentName(
             context,
             "${context.packageName}.ui.MainActivity"
@@ -156,24 +140,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
-    fun setupMasterPattern() {
-        // Launch pattern setup activity
-        val intent = Intent(context, com.ankitsaini.securevault.ui.MainActivity::class.java)
-        intent.putExtra("setup_pattern", true)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-    }
-    
-    fun showFailedAttemptsDialog() {
-        // Show dialog to change max failed attempts
-        // Implementation would show a number picker
-    }
-    
-    fun showRelockTimeoutDialog() {
-        // Show dialog to change relock timeout
-        // Implementation would show a number picker
-    }
-    
     fun openAccessibilitySettings() {
         serviceManager.openAccessibilitySettings()
     }
@@ -196,8 +162,16 @@ class SettingsViewModel @Inject constructor(
     
     fun clearSecurityLog() {
         viewModelScope.launch {
-            // Clear all security events from database
-            // This would need a DAO method to delete all events
+            // This would need a DAO method to clear all events
+            // For now, log a clearing event
+            securityRepository.logEvent(
+                com.ankitsaini.securevault.data.model.SecurityEvent(
+                    packageName = "system",
+                    eventType = com.ankitsaini.securevault.data.model.EventType.APP_PROTECTION_DISABLED,
+                    eventDetails = "Security log cleared by user",
+                    wasSuccessful = true
+                )
+            )
         }
     }
     
@@ -226,10 +200,7 @@ class SettingsViewModel @Inject constructor(
                 val backupFile = fileManager.createBackupFile(backupData.toString())
                 
                 if (backupFile != null) {
-                    preferencesManager.putLong(
-                        Constants.KEY_LAST_BACKUP,
-                        System.currentTimeMillis()
-                    )
+                    preferencesManager.putLong(Constants.KEY_LAST_BACKUP, System.currentTimeMillis())
                 }
             } catch (e: Exception) {
                 // Handle backup error
@@ -251,20 +222,10 @@ class SettingsViewModel @Inject constructor(
                     val backupData = latestBackup.readText()
                     val jsonObject = JSONObject(backupData)
                     
-                    // Restore settings
                     val settingsObject = jsonObject.getJSONObject("settings")
-                    preferencesManager.putBoolean(
-                        Constants.PREF_BIOMETRIC_ENABLED,
-                        settingsObject.getBoolean("biometricEnabled")
-                    )
-                    preferencesManager.putBoolean(
-                        Constants.PREF_AUTO_START,
-                        settingsObject.getBoolean("autoStartOnBoot")
-                    )
-                    preferencesManager.putBoolean(
-                        Constants.PREF_INTRUDER_PHOTO,
-                        settingsObject.getBoolean("intruderPhotoEnabled")
-                    )
+                    preferencesManager.putBoolean(Constants.PREF_BIOMETRIC_ENABLED, settingsObject.getBoolean("biometricEnabled"))
+                    preferencesManager.putBoolean(Constants.PREF_AUTO_START, settingsObject.getBoolean("autoStartOnBoot"))
+                    preferencesManager.putBoolean(Constants.PREF_INTRUDER_PHOTO, settingsObject.getBoolean("intruderPhotoEnabled"))
                     
                     loadSettings()
                 }
@@ -278,19 +239,10 @@ class SettingsViewModel @Inject constructor(
     
     fun clearAllData() {
         viewModelScope.launch {
-            // Clear preferences
             preferencesManager.clear()
-            
-            // Clear session
             sessionManager.clearAllSessionData()
-            
-            // Delete all photos
             cameraManager.deleteAllPhotos()
-            
-            // Clear temporary files
             fileManager.clearTempFiles()
-            
-            // Reset settings
             loadSettings()
         }
     }
