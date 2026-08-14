@@ -15,18 +15,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ankitsaini.securevault.data.model.ProtectedApp
 import com.ankitsaini.securevault.data.model.SecurityEvent
+import com.ankitsaini.securevault.data.model.EventType
 import com.ankitsaini.securevault.data.repository.DashboardData
 import com.ankitsaini.securevault.ui.viewmodel.DashboardViewModel
-import java.text.SimpleDateFormat
-import java.util.*
+import com.ankitsaini.securevault.utils.DateUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,9 +73,7 @@ fun DashboardScreen(
             
             // Stats Overview
             item {
-                StatsOverview(
-                    dashboardData = dashboardData
-                )
+                StatsOverview(dashboardData = dashboardData)
             }
             
             // Quick Actions
@@ -97,7 +95,10 @@ fun DashboardScreen(
                     )
                 }
                 
-                items(dashboardData.protectedApps.take(5)) { app ->
+                items(
+                    items = dashboardData.protectedApps.take(5),
+                    key = { it.packageName }
+                ) { app ->
                     ProtectedAppCard(
                         app = app,
                         onClick = { /* Navigate to app details */ }
@@ -115,7 +116,10 @@ fun DashboardScreen(
                     )
                 }
                 
-                items(dashboardData.recentEvents.take(5)) { event ->
+                items(
+                    items = dashboardData.recentEvents.take(5),
+                    key = { it.eventId }
+                ) { event ->
                     SecurityEventItem(event = event)
                 }
             }
@@ -204,7 +208,7 @@ fun StatsOverview(dashboardData: DashboardData) {
 fun StatItem(
     value: String,
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: ImageVector
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
@@ -259,7 +263,7 @@ fun QuickActionsRow(
 @Composable
 fun QuickActionButton(
     text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     onClick: () -> Unit
 ) {
     Column(
@@ -342,8 +346,6 @@ fun ProtectedAppCard(
 
 @Composable
 fun SecurityEventItem(event: SecurityEvent) {
-    val dateFormat = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
-    
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -352,15 +354,15 @@ fun SecurityEventItem(event: SecurityEvent) {
     ) {
         Icon(
             imageVector = when (event.eventType) {
-                com.ankitsaini.securevault.data.model.EventType.UNLOCK_FAILED -> Icons.Default.Warning
-                com.ankitsaini.securevault.data.model.EventType.UNLOCK_SUCCESSFUL -> Icons.Default.CheckCircle
-                com.ankitsaini.securevault.data.model.EventType.INTRUDER_PHOTO_CAPTURED -> Icons.Default.PhotoCamera
+                EventType.UNLOCK_FAILED -> Icons.Default.Warning
+                EventType.UNLOCK_SUCCESSFUL -> Icons.Default.CheckCircle
+                EventType.INTRUDER_PHOTO_CAPTURED -> Icons.Default.PhotoCamera
                 else -> Icons.Default.Info
             },
             contentDescription = null,
             tint = when (event.eventType) {
-                com.ankitsaini.securevault.data.model.EventType.UNLOCK_FAILED -> MaterialTheme.colorScheme.error
-                com.ankitsaini.securevault.data.model.EventType.UNLOCK_SUCCESSFUL -> Color(0xFF4CAF50)
+                EventType.UNLOCK_FAILED -> MaterialTheme.colorScheme.error
+                EventType.UNLOCK_SUCCESSFUL -> Color(0xFF4CAF50)
                 else -> MaterialTheme.colorScheme.primary
             }
         )
@@ -374,7 +376,7 @@ fun SecurityEventItem(event: SecurityEvent) {
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = dateFormat.format(Date(event.eventTimestamp)),
+                text = DateUtils.getRelativeTime(event.eventTimestamp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
