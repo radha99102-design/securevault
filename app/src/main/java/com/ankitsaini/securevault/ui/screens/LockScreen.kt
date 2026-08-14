@@ -14,10 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.ankitsaini.securevault.data.model.LockType
 import com.ankitsaini.securevault.auth.AuthViewModel
 
@@ -28,13 +27,19 @@ fun LockScreen(
     lockType: LockType,
     onAuthenticated: () -> Unit,
     onCancel: () -> Unit,
-    viewModel: AuthViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val authState by viewModel.authState.collectAsState()
     
     LaunchedEffect(packageName, lockType) {
         viewModel.setupAuthentication(packageName, lockType)
+    }
+    
+    // Auto-authenticate if lock type is NONE
+    LaunchedEffect(lockType) {
+        if (lockType == LockType.NONE) {
+            onAuthenticated()
+        }
     }
     
     Box(
@@ -113,18 +118,15 @@ fun LockScreen(
                     isLockedOut = uiState.isLockedOut
                 )
                 
-                LockType.BIOMETRIC -> BiometricPrompt(
+                LockType.BIOMETRIC -> BiometricPromptUI(
+                    isAvailable = uiState.biometricAvailable,
                     onAuthenticate = {
-                        // Trigger biometric authentication
-                    },
-                    isAvailable = uiState.biometricAvailable
+                        // Will be handled by parent activity
+                    }
                 )
                 
                 LockType.NONE -> {
-                    // No lock needed
-                    LaunchedEffect(Unit) {
-                        onAuthenticated()
-                    }
+                    // No lock needed - auto authenticate
                 }
             }
             
@@ -211,7 +213,6 @@ fun PinInput(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
-                // Empty space for alignment
                 Spacer(modifier = Modifier.size(72.dp))
                 
                 NumberButton(
@@ -229,7 +230,7 @@ fun PinInput(
                 
                 IconButton(
                     onClick = {
-                        if (pin.isNotEmpty()) {
+                        if (pin.isNotEmpty() && !isLockedOut && !isLoading) {
                             pin = pin.dropLast(1)
                         }
                     },
@@ -303,7 +304,9 @@ fun PatternInput(
                             isSelected = selectedPattern.contains(index),
                             onClick = {
                                 if (!isLockedOut && !isLoading) {
-                                    selectedPattern = selectedPattern + index
+                                    if (!selectedPattern.contains(index)) {
+                                        selectedPattern = selectedPattern + index
+                                    }
                                 }
                             }
                         )
@@ -314,23 +317,26 @@ fun PatternInput(
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        Button(
-            onClick = {
-                if (selectedPattern.isNotEmpty() && !isLockedOut && !isLoading) {
-                    onPatternEntered(selectedPattern)
-                    selectedPattern = emptyList()
-                }
-            },
-            enabled = selectedPattern.isNotEmpty() && !isLockedOut && !isLoading
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Verify Pattern")
-        }
-        
-        TextButton(
-            onClick = { selectedPattern = emptyList() },
-            enabled = selectedPattern.isNotEmpty()
-        ) {
-            Text("Clear")
+            Button(
+                onClick = {
+                    if (selectedPattern.isNotEmpty() && !isLockedOut && !isLoading) {
+                        onPatternEntered(selectedPattern)
+                    }
+                },
+                enabled = selectedPattern.isNotEmpty() && !isLockedOut && !isLoading
+            ) {
+                Text("Verify Pattern")
+            }
+            
+            OutlinedButton(
+                onClick = { selectedPattern = emptyList() },
+                enabled = selectedPattern.isNotEmpty() && !isLockedOut && !isLoading
+            ) {
+                Text("Clear")
+            }
         }
     }
 }
@@ -365,9 +371,9 @@ fun PatternDot(
 }
 
 @Composable
-fun BiometricPrompt(
-    onAuthenticate: () -> Unit,
-    isAvailable: Boolean
+fun BiometricPromptUI(
+    isAvailable: Boolean,
+    onAuthenticate: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
