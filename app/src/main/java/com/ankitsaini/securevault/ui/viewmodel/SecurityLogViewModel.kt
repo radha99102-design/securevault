@@ -37,9 +37,6 @@ class SecurityLogViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
     
-    private val _selectedDate = MutableStateFlow<Long?>(null)
-    val selectedDate: StateFlow<Long?> = _selectedDate.asStateFlow()
-    
     private val _stats = MutableStateFlow(SecurityStats())
     val stats: StateFlow<SecurityStats> = _stats.asStateFlow()
     
@@ -91,7 +88,6 @@ class SecurityLogViewModel @Inject constructor(
         val events = _allEvents.value
         val filter = _filterType.value
         val query = _searchQuery.value
-        val date = _selectedDate.value
         
         _filteredEvents.value = events.filter { event ->
             // Apply type filter
@@ -103,21 +99,6 @@ class SecurityLogViewModel @Inject constructor(
             if (query.isNotEmpty()) {
                 val searchableText = "${event.eventType.name} ${event.eventDetails ?: ""} ${event.packageName}"
                 if (!searchableText.contains(query, ignoreCase = true)) {
-                    return@filter false
-                }
-            }
-            
-            // Apply date filter
-            if (date != null) {
-                val eventDate = java.util.Calendar.getInstance().apply {
-                    timeInMillis = event.eventTimestamp
-                }
-                val selectedDateCalendar = java.util.Calendar.getInstance().apply {
-                    timeInMillis = date
-                }
-                
-                if (eventDate.get(java.util.Calendar.YEAR) != selectedDateCalendar.get(java.util.Calendar.YEAR) ||
-                    eventDate.get(java.util.Calendar.DAY_OF_YEAR) != selectedDateCalendar.get(java.util.Calendar.DAY_OF_YEAR)) {
                     return@filter false
                 }
             }
@@ -141,11 +122,6 @@ class SecurityLogViewModel @Inject constructor(
         applyFilters()
     }
     
-    fun setDate(date: Long?) {
-        _selectedDate.value = date
-        applyFilters()
-    }
-    
     fun clearLog() {
         viewModelScope.launch {
             securityRepository.logEvent(
@@ -157,7 +133,6 @@ class SecurityLogViewModel @Inject constructor(
                 )
             )
             
-            // Clear all events
             _allEvents.value = emptyList()
             _filteredEvents.value = emptyList()
             updateStats(emptyList())
